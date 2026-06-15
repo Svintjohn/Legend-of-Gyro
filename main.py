@@ -23,7 +23,6 @@ dim_red = (150, 40, 40)
 dark_bg = (12, 2, 2)
 
 def lerp_color(c1, c2, t):
-    """Smooth transition formula para sa Day/Night colors"""
     return (
         int(c1[0] + (c2[0] - c1[0]) * t),
         int(c1[1] + (c2[1] - c1[1]) * t),
@@ -206,7 +205,7 @@ class MainChar:
             if acts.get("down"):
                 self.ty += 7
                 
-            max_flight_height = self.floor_y - 210
+            max_flight_height = self.floor_y - 370
             if self.ty < max_flight_height: 
                 self.ty = max_flight_height
             if self.ty > self.y_run: 
@@ -310,6 +309,8 @@ async def login_menu():
 
         draw_text_hacked(screen, " EDGE RUNNER ", get_font(26), black, (w//2 - 110, h * 0.62))
         
+        screen.blit(get_font(16).render("TAP ANYWHERE TO QUICK START AS GUEST", True, dim_red), (w//2 - 200, h * 0.88))
+
         for i, row in enumerate(get_leaderboard()[:5]):
             row_txt = get_font(20).render(f"[{i+1}] {row[0].upper()} >> {row[1]}", True, black)
             screen.blit(row_txt, (w//2 - row_txt.get_width()//2, h * 0.72 + (i * 28)))
@@ -334,6 +335,13 @@ async def login_menu():
                         return pid.strip()
                 else:
                     if len(pid) < 15 and (ev.unicode.isalnum() or ev.unicode in '._ '): pid += ev.unicode
+            
+            # TOUCH DETECTION PARA SA LOGIN BYPASS
+            if ev.type == pygame.MOUSEBUTTONDOWN or ev.type == pygame.FINGERDOWN:
+                if not pid.strip():
+                    return f"GUEST_{random.randint(1000, 9999)}"
+                else:
+                    return pid.strip()
         
         await asyncio.sleep(0)
 
@@ -386,12 +394,20 @@ async def game_loop(pid):
         if keys[pygame.K_DOWN]: acts["down"] = True
         if keys[pygame.K_UP] or keys[pygame.K_SPACE]: acts["fly_up"] = True
 
+        # TOUCH HOLD DETECTION PARA MAKALIPAD SA ANTI-GRAVITY
+        if pygame.mouse.get_pressed()[0]:
+            acts["fly_up"] = True
+
         for ev in pygame.event.get():
             if ev.type == pygame.QUIT: pygame.quit(); sys.exit()
             if ev.type == pygame.VIDEORESIZE: screen = pygame.display.set_mode((ev.w, ev.h), pygame.RESIZABLE)
             if ev.type == pygame.KEYDOWN:
                 if ev.key in [pygame.K_SPACE, pygame.K_UP]: acts["up"] = True
                 if ev.key == pygame.K_g: hero.anti_gravity = not hero.anti_gravity
+            
+            # TOUCH SCREEN TAP PARA TUMALON
+            if ev.type == pygame.MOUSEBUTTONDOWN or ev.type == pygame.FINGERDOWN:
+                acts["up"] = True
 
         hero.update(acts, floor_y)
         city_bg.update(spd); city_fg.update(spd)
@@ -552,6 +568,7 @@ async def death_screen(pid, last_pts):
         screen.blit(c_lbl, (cx - c_w//2 + c_key.get_width(), h * 0.50))
 
         screen.blit(get_font(22).render("CLASSIFIED_SCORES", True, cyber_red), (cx - 120, h * 0.57))
+        screen.blit(get_font(16).render("TAP ANYWHERE TO REBOOT", True, dim_red), (cx - 110, h * 0.90))
         
         for i, row in enumerate(get_leaderboard()):
             col = 0 if i < 10 else 1
@@ -575,6 +592,10 @@ async def death_screen(pid, last_pts):
                 if ev.key == pygame.K_r: return "RESTART"
                 if ev.key == pygame.K_n: return "NEW_GAME"
                 if ev.key == pygame.K_c: wipe_db()
+            
+            # TOUCH DETECTION PARA MAG-REBOOT
+            if ev.type == pygame.MOUSEBUTTONDOWN or ev.type == pygame.FINGERDOWN:
+                return "RESTART"
         
         await asyncio.sleep(0)
 
