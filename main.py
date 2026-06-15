@@ -22,6 +22,14 @@ cyber_red = (255, 0, 0)
 dim_red = (150, 40, 40)
 dark_bg = (12, 2, 2)
 
+def lerp_color(c1, c2, t):
+    """Smooth transition formula para sa Day/Night colors"""
+    return (
+        int(c1[0] + (c2[0] - c1[0]) * t),
+        int(c1[1] + (c2[1] - c1[1]) * t),
+        int(c1[2] + (c2[2] - c1[2]) * t)
+    )
+
 def play_music(mode_str):
     try:
         if mode_str == "main":
@@ -198,8 +206,11 @@ class MainChar:
             if acts.get("down"):
                 self.ty += 7
                 
-            if self.ty < 0: self.ty = 0
-            if self.ty > self.y_run: self.ty = self.y_run
+            max_flight_height = self.floor_y - 210
+            if self.ty < max_flight_height: 
+                self.ty = max_flight_height
+            if self.ty > self.y_run: 
+                self.ty = self.y_run
         else:
             if acts.get("down") and not self.is_jumping:
                 self.is_ducking, self.pic, self.ty = True, img_duck, self.y_duck
@@ -257,12 +268,12 @@ class FlyingObstacle:
 def get_floor_height(sh): 
     return int(sh * 0.8)
 
-def draw_scanlines(surf, w, h):
-    for y in range(0, h, 4):
+def draw_scanlines(surf, w, h, offset=0):
+    for y in range(-4, h, 4):
         line = pygame.Surface((w, 1))
         line.set_alpha(30)
         line.fill((0,0,0))
-        surf.blit(line, (0, y))
+        surf.blit(line, (0, y + offset))
 
 def draw_text_hacked(surf, txt, f, c, pos, shd_c=(30, 30, 30)):
     shd = f.render(txt, True, shd_c)
@@ -303,7 +314,8 @@ async def login_menu():
             row_txt = get_font(20).render(f"[{i+1}] {row[0].upper()} >> {row[1]}", True, black)
             screen.blit(row_txt, (w//2 - row_txt.get_width()//2, h * 0.72 + (i * 28)))
 
-        draw_scanlines(screen, w, h)
+        scanline_anim = (pygame.time.get_ticks() // 50) % 4
+        draw_scanlines(screen, w, h, scanline_anim)
         pygame.display.update()
 
         for ev in pygame.event.get():
@@ -341,6 +353,12 @@ async def game_loop(pid):
     
     spd, score, bg_x, glitch_timer, shake_timer = 7, 0.0, 0, 0, 0
 
+    curr_bg = list(white)
+    curr_txt = list(black)
+    curr_cloud = list((230, 230, 230))
+    curr_cb = list((220, 220, 225))
+    curr_cf = list((190, 190, 195))
+
     while True:
         clock.tick(fps_limit)
         w, h = screen.get_size()
@@ -349,11 +367,19 @@ async def game_loop(pid):
         floor_y = get_floor_height(h) 
         
         is_night = (int(score) // 300) % 2 == 1
-        bg_col = night_bg if is_night else white
-        txt_col = cyan if is_night else black
-        cloud_col = (40, 40, 45) if is_night else (230, 230, 230)
         
-        cb_col, cf_col = ((25, 25, 30) if is_night else (220, 220, 225)), ((35, 35, 40) if is_night else (190, 190, 195))
+        tgt_bg = night_bg if is_night else white
+        tgt_txt = cyan if is_night else black
+        tgt_cloud = (40, 40, 45) if is_night else (230, 230, 230)
+        tgt_cb = (25, 25, 30) if is_night else (220, 220, 225)
+        tgt_cf = (35, 35, 40) if is_night else (190, 190, 195)
+
+        fade_spd = 0.03
+        curr_bg = lerp_color(curr_bg, tgt_bg, fade_spd)
+        curr_txt = lerp_color(curr_txt, tgt_txt, fade_spd)
+        curr_cloud = lerp_color(curr_cloud, tgt_cloud, fade_spd)
+        curr_cb = lerp_color(curr_cb, tgt_cb, fade_spd)
+        curr_cf = lerp_color(curr_cf, tgt_cf, fade_spd)
 
         acts = {"up": False, "down": False, "fly_up": False}
         keys = pygame.key.get_pressed()
@@ -405,9 +431,9 @@ async def game_loop(pid):
                     save_score(pid, int(score))
                     
                     for _ in range(40):
-                        render_buf.fill(bg_col)
-                        city_bg.draw(render_buf, floor_y, cb_col)
-                        city_fg.draw(render_buf, floor_y, cf_col)
+                        render_buf.fill(curr_bg)
+                        city_bg.draw(render_buf, floor_y, curr_cb)
+                        city_fg.draw(render_buf, floor_y, curr_cf)
                         render_buf.blit(img_track, (bg_x, floor_y - 10))
                         render_buf.blit(img_track, (bg_x + 2400, floor_y - 10))
                         hero.draw(render_buf)
@@ -425,7 +451,7 @@ async def game_loop(pid):
                         sx, sy = random.randint(-20, 20), random.randint(-20, 20)
                         screen.fill(black)
                         screen.blit(render_buf, (sx, sy))
-                        draw_scanlines(screen, w, h)
+                        draw_scanlines(screen, w, h, (pygame.time.get_ticks() // 50) % 4)
                         pygame.display.update()
                         clock.tick(fps_limit)
                         await asyncio.sleep(0)
@@ -435,26 +461,32 @@ async def game_loop(pid):
             render_buf.fill((random.randint(0,255), 0, random.randint(0,255)))
             glitch_timer -= 1
         else:
-            render_buf.fill(bg_col)
+            render_buf.fill(curr_bg)
             
         if is_night:
             for s in stars: pygame.draw.circle(render_buf, white, s, random.randint(1, 2))
         
-        for c in clouds: c.draw(render_buf, cloud_col)
+        for c in clouds: c.draw(render_buf, curr_cloud)
         
-        city_bg.draw(render_buf, floor_y, cb_col)
-        city_fg.draw(render_buf, floor_y, cf_col)
+        city_bg.draw(render_buf, floor_y, curr_cb)
+        city_fg.draw(render_buf, floor_y, curr_cf)
 
         render_buf.blit(img_track, (bg_x, floor_y - 10))
         render_buf.blit(img_track, (bg_x + 2400, floor_y - 10))
         
         hero.draw(render_buf)
         for ob in obstacles: ob.draw(render_buf)
-
-        draw_text_hacked(render_buf, f"SYNC: {int(score):05d}", get_font(26), txt_col, (w - 260, 30))
-        draw_text_hacked(render_buf, f"HP: {'#' * hero.hp}", get_font(20), cyber_red if hero.hp == 1 else txt_col, (w - 260, 65))
         
-        if hero.anti_gravity:
+        if hero.iframes > 0:
+            border_alpha = min(255, hero.iframes * 4)
+            edge_flash = pygame.Surface((w, h), pygame.SRCALPHA)
+            pygame.draw.rect(edge_flash, (255, 0, 0, border_alpha), (0, 0, w, h), 15)
+            render_buf.blit(edge_flash, (0, 0))
+
+        draw_text_hacked(render_buf, f"SYNC: {int(score):05d}", get_font(26), tuple(curr_txt), (w - 260, 30))
+        draw_text_hacked(render_buf, f"HP: {'#' * hero.hp}", get_font(20), cyber_red if hero.hp == 1 else tuple(curr_txt), (w - 260, 65))
+        
+        if hero.anti_gravity and (pygame.time.get_ticks() // 300) % 2 == 0:
             draw_text_hacked(render_buf, "ANTI-GRAV: ON", get_font(20), neon_pink, (w - 260, 100))
 
         sx, sy = (random.randint(-10, 10), random.randint(-10, 10)) if shake_timer > 0 else (0, 0)
@@ -462,9 +494,11 @@ async def game_loop(pid):
 
         screen.fill(black)
         screen.blit(render_buf, (sx, sy))
-        draw_scanlines(screen, w, h)
-        pygame.display.update()
         
+        scanline_anim = (pygame.time.get_ticks() // 50) % 4
+        draw_scanlines(screen, w, h, scanline_anim)
+        
+        pygame.display.update()
         await asyncio.sleep(0)
 
 async def death_screen(pid, last_pts):
@@ -480,9 +514,7 @@ async def death_screen(pid, last_pts):
         for n in bg_nums:
             num_s = get_font(12).render(str(round(random.random(), 4)), True, (40, 5, 5))
             screen.blit(num_s, (n[0], n[1]))
-            
             n[1] -= n[2]
-            
             if n[1] < 0:
                 n[1] = h 
                 n[0] = random.randint(0, w) 
@@ -503,11 +535,21 @@ async def death_screen(pid, last_pts):
         warn_txt = get_font(14).render("WARNING: CRITICAL ERROR OF NEURAL CONNECTIONS", True, dim_red)
         screen.blit(warn_txt, (cx - box_w//2 + 15, cy + box_h//2 - 25))
         
-        screen.blit(get_font(20).render("[R] REBOOT", True, cyber_red), (cx - 200, h * 0.45))
-        screen.blit(get_font(20).render("[N] SWITCH_ID", True, cyber_red), (cx + 50, h * 0.45))
+        r_key = get_font(20).render("[R]", True, cyan)
+        r_lbl = get_font(20).render(" REBOOT", True, cyber_red)
+        screen.blit(r_key, (cx - 200, h * 0.45))
+        screen.blit(r_lbl, (cx - 200 + r_key.get_width(), h * 0.45))
+
+        n_key = get_font(20).render("[N]", True, cyan)
+        n_lbl = get_font(20).render(" SWITCH_ID", True, cyber_red)
+        screen.blit(n_key, (cx + 50, h * 0.45))
+        screen.blit(n_lbl, (cx + 50 + n_key.get_width(), h * 0.45))
         
-        c_txt = get_font(15).render("[C] WIPE_DB", True, dim_red)
-        screen.blit(c_txt, (cx - c_txt.get_width()//2, h * 0.50))
+        c_key = get_font(15).render("[C]", True, neon_pink)
+        c_lbl = get_font(15).render(" WIPE_DB", True, dim_red)
+        c_w = c_key.get_width() + c_lbl.get_width()
+        screen.blit(c_key, (cx - c_w//2, h * 0.50))
+        screen.blit(c_lbl, (cx - c_w//2 + c_key.get_width(), h * 0.50))
 
         screen.blit(get_font(22).render("CLASSIFIED_SCORES", True, cyber_red), (cx - 120, h * 0.57))
         
@@ -517,7 +559,8 @@ async def death_screen(pid, last_pts):
             y = (h * 0.63) + ((i % 10) * 18) 
             screen.blit(get_font(16).render(f"{i+1:02d}. {row[0][:10].upper():<10} >> {row[1]:05d}", True, (200, 50, 50)), (x, y))
 
-        draw_scanlines(screen, w, h)
+        scanline_anim = (pygame.time.get_ticks() // 50) % 4
+        draw_scanlines(screen, w, h, scanline_anim)
         pygame.display.update()
 
         for ev in pygame.event.get():
