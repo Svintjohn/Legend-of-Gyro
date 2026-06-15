@@ -25,18 +25,18 @@ dark_bg = (12, 2, 2)
 def play_music(mode_str):
     try:
         if mode_str == "main":
-            pygame.mixer.music.load("assets/game.mp3")
+            pygame.mixer.music.load("assets/game.ogg")
             pygame.mixer.music.set_volume(0.6)  
             pygame.mixer.music.play(-1)         
         else:
-            pygame.mixer.music.load("assets/death.mp3")
+            pygame.mixer.music.load("assets/death.ogg")
             pygame.mixer.music.set_volume(0.6)
             pygame.mixer.music.play(-1)
     except:
         pass
 
 try:
-    hp_sfx = pygame.mixer.Sound("assets/heart.mp3")
+    hp_sfx = pygame.mixer.Sound("assets/heart.ogg")
     hp_sfx.set_volume(0.9)
 except:
     hp_sfx = None
